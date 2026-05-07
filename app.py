@@ -208,6 +208,7 @@ def webhook():
         tp_payload = {
             "ticker": ticker,
             "action": action,
+            "price": price,
             "quantity": quantity,
             "takeProfit": {
                 "amount": tp_amount
