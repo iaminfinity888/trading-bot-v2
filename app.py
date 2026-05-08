@@ -163,7 +163,18 @@ def webhook():
             return jsonify({"error": "Unauthorized"}), 401
 
         signal = data.get("signal", "").strip()
-        price = data.get("price", 0)  # Informational only — used for logging/Telegram
+
+        # Price extraction — accept "price" or "entry" field (NPR scripts use "entry")
+        raw_price = data.get("price") or data.get("entry") or 0
+        try:
+            price = round(float(raw_price), 2)
+        except (ValueError, TypeError):
+            logger.error(f"Invalid price value: {raw_price}")
+            return jsonify({"error": f"Invalid price value: {raw_price}"}), 400
+
+        if price <= 0:
+            logger.error(f"Price must be positive, got: {price}")
+            return jsonify({"error": "Price must be positive"}), 400
 
         if not signal:
             return jsonify({"error": "Missing signal"}), 400
