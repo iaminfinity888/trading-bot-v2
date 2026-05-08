@@ -35,6 +35,10 @@ GOLD_SL_TOTAL = float(os.environ.get("GOLD_SL_TOTAL", "888"))
 MES_TP_TOTAL = float(os.environ.get("MES_TP_TOTAL", "350"))
 MES_SL_TOTAL = float(os.environ.get("MES_SL_TOTAL", "888"))
 
+# Dollars per point — used to convert dollar amounts to points for TradersPost
+GOLD_DOLLAR_PER_POINT = float(os.environ.get("GOLD_DOLLAR_PER_POINT", "10"))
+MES_DOLLAR_PER_POINT = float(os.environ.get("MES_DOLLAR_PER_POINT", "5"))
+
 # ─── Duplicate Signal Protection ──────────────────────────────────────────────
 # In-memory cache to prevent duplicate trades from webhook retries
 # Key: hash of signal+price, Value: timestamp
@@ -186,15 +190,19 @@ def webhook():
         if instrument == "GOLD":
             ticker = MGC_CONTRACT
             quantity = GOLD_QUANTITY
-            tp_amount = round(GOLD_TP_TOTAL / GOLD_QUANTITY, 2)
-            sl_amount = round(GOLD_SL_TOTAL / GOLD_QUANTITY, 2)
+            tp_dollars_per_contract = round(GOLD_TP_TOTAL / GOLD_QUANTITY, 2)
+            sl_dollars_per_contract = round(GOLD_SL_TOTAL / GOLD_QUANTITY, 2)
+            tp_points = round(tp_dollars_per_contract / GOLD_DOLLAR_PER_POINT, 2)
+            sl_points = round(sl_dollars_per_contract / GOLD_DOLLAR_PER_POINT, 2)
             webhook_url = TRADERSPOST_GOLD_WEBHOOK_URL
             instrument_label = f"Gold (MGC) - {ticker}"
         else:  # MES
             ticker = MES_CONTRACT
             quantity = MES_QUANTITY
-            tp_amount = round(MES_TP_TOTAL / MES_QUANTITY, 2)
-            sl_amount = round(MES_SL_TOTAL / MES_QUANTITY, 2)
+            tp_dollars_per_contract = round(MES_TP_TOTAL / MES_QUANTITY, 2)
+            sl_dollars_per_contract = round(MES_SL_TOTAL / MES_QUANTITY, 2)
+            tp_points = round(tp_dollars_per_contract / MES_DOLLAR_PER_POINT, 2)
+            sl_points = round(sl_dollars_per_contract / MES_DOLLAR_PER_POINT, 2)
             webhook_url = TRADERSPOST_MES_WEBHOOK_URL
             instrument_label = f"MES - {ticker}"
 
@@ -211,10 +219,10 @@ def webhook():
             "price": price,
             "quantity": quantity,
             "takeProfit": {
-                "amount": tp_amount
+                "amount": tp_points
             },
             "stopLoss": {
-                "amount": sl_amount
+                "amount": sl_points
             }
         }
 
@@ -251,8 +259,8 @@ def webhook():
                 f"<b>Action:</b> {action.upper()}\n"
                 f"<b>Quantity:</b> {quantity}\n"
                 f"<b>Price:</b> {price}\n"
-                f"<b>TP:</b> ${tp_amount:.2f}/contract (${tp_amount * quantity:.2f} total)\n"
-                f"<b>SL:</b> ${sl_amount:.2f}/contract (${sl_amount * quantity:.2f} total)"
+                f"<b>TP:</b> {tp_points} pts/contract (${tp_dollars_per_contract:.2f}/contract, ${tp_dollars_per_contract * quantity:.2f} total)\n"
+                f"<b>SL:</b> {sl_points} pts/contract (${sl_dollars_per_contract:.2f}/contract, ${sl_dollars_per_contract * quantity:.2f} total)"
             )
             send_telegram_message(msg)
             return jsonify({"status": "success", "message": f"Signal {signal} processed for {instrument}"}), 200
