@@ -39,6 +39,13 @@ MES_SL_TOTAL  = float(os.environ.get("MES_SL_TOTAL",  "888"))
 GOLD_DOLLAR_PER_POINT = float(os.environ.get("GOLD_DOLLAR_PER_POINT", "10"))
 MES_DOLLAR_PER_POINT  = float(os.environ.get("MES_DOLLAR_PER_POINT",  "5"))
 
+# ─── Contrarian Mode ──────────────────────────────────────────────────────────
+# When True, every BULL signal → sell and every BEAR signal → buy.
+# Toggle in Railway env vars — no redeploy needed (restart required).
+CONTRARIAN_MODE = os.environ.get("CONTRARIAN_MODE", "false").lower() == "true"
+if CONTRARIAN_MODE:
+    logger.info("⚠️  CONTRARIAN MODE ENABLED — all signal directions will be reversed")
+
 # ─── Trade Duration Expiry ────────────────────────────────────────────────────
 # After this many minutes the bot assumes the trade has closed naturally
 # (hit TP, SL, or was manually exited) and will accept new signals again.
@@ -152,7 +159,6 @@ VALID_SIGNALS = {
     "GOLD_NPR_BULL_ELEPHANT",     "GOLD_NPR_BEAR_ELEPHANT",
     "GOLD_NPR_BULL_TAIL",         "GOLD_NPR_BEAR_TAIL",
     "GOLD_NPR_BULL_180",          "GOLD_NPR_BEAR_180",
-    "GOLD_BULLISH_LIQUIDITY_SWEEP","GOLD_BEARISH_LIQUIDITY_SWEEP",
     # MES signals (MES_ prefix)
     "MES_BULLISH_180",            "MES_BEARISH_180",
     "MES_BULLISH_LIQUIDITY_RUN",  "MES_BEARISH_LIQUIDITY_RUN",
@@ -160,8 +166,6 @@ VALID_SIGNALS = {
     "MES_NPR_BULL_ELEPHANT",      "MES_NPR_BEAR_ELEPHANT",
     "MES_NPR_BULL_TAIL",          "MES_NPR_BEAR_TAIL",
     "MES_NPR_BULL_180",           "MES_NPR_BEAR_180",
-    "MES_BULLISH_LIQUIDITY_SWEEP","MES_BEARISH_LIQUIDITY_SWEEP",
-    
 } | LEGACY_GOLD_SIGNALS
 
 
@@ -193,10 +197,17 @@ def determine_instrument(signal):
 def determine_direction(signal):
     su = signal.upper()
     if "BULL" in su:
-        return "buy"
-    if "BEAR" in su:
-        return "sell"
-    return None
+        direction = "buy"
+    elif "BEAR" in su:
+        direction = "sell"
+    else:
+        return None
+
+    if CONTRARIAN_MODE:
+        direction = "sell" if direction == "buy" else "buy"
+        logger.info(f"Contrarian mode: {signal} direction reversed → {direction.upper()}")
+
+    return direction
 
 
 def build_instrument_params(instrument):
@@ -242,6 +253,7 @@ def health_check():
     return jsonify({
         "status":         "healthy",
         "message":        "Trading Bot is running",
+        "contrarian_mode": CONTRARIAN_MODE,
         "open_positions": OPEN_POSITIONS,
         "max_trade_duration_minutes": MAX_TRADE_DURATION_SECONDS // 60,
     }), 200
@@ -429,8 +441,9 @@ def webhook():
             set_open_position(instrument, action, signal, price)
 
             emoji = "\U0001f7e2" if action == "buy" else "\U0001f534"
+            contrarian_tag = "\n<b>⚠️ CONTRARIAN MODE:</b> direction reversed" if CONTRARIAN_MODE else ""
             msg = (
-                f"<b>{emoji} Trade Entry Alert</b>\n\n"
+                f"<b>{emoji} Trade Entry Alert</b>{contrarian_tag}\n\n"
                 f"<b>Signal:</b> {signal}\n"
                 f"<b>Instrument:</b> {params['label']}\n"
                 f"<b>Action:</b> {action.upper()}\n"
