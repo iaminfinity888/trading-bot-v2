@@ -18,26 +18,33 @@ if not WEBHOOK_PASSPHRASE:
 
 TRADERSPOST_GOLD_WEBHOOK_URL = os.environ.get("TRADERSPOST_GOLD_WEBHOOK_URL")
 TRADERSPOST_MES_WEBHOOK_URL  = os.environ.get("TRADERSPOST_MES_WEBHOOK_URL")
+TRADERSPOST_MCL_WEBHOOK_URL  = os.environ.get("TRADERSPOST_MCL_WEBHOOK_URL")
 
 # ─── Environment Variables (Configurable with defaults) ───────────────────────
 MGC_CONTRACT       = os.environ.get("MGC_CONTRACT",  "MGCM2026")
 MES_CONTRACT       = os.environ.get("MES_CONTRACT",  "MESM2026")
+MCL_CONTRACT       = os.environ.get("MCL_CONTRACT",  "MCLN2026")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID   = os.environ.get("TELEGRAM_CHAT_ID")
 
 # Position sizing
 GOLD_QUANTITY = int(os.environ.get("GOLD_QUANTITY", "5"))
 MES_QUANTITY  = int(os.environ.get("MES_QUANTITY",  "10"))
+MCL_QUANTITY  = int(os.environ.get("MCL_QUANTITY",  "1"))
 
 # TP/SL total dollar amounts
 GOLD_TP_TOTAL = float(os.environ.get("GOLD_TP_TOTAL", "350"))
 GOLD_SL_TOTAL = float(os.environ.get("GOLD_SL_TOTAL", "888"))
 MES_TP_TOTAL  = float(os.environ.get("MES_TP_TOTAL",  "350"))
 MES_SL_TOTAL  = float(os.environ.get("MES_SL_TOTAL",  "888"))
+MCL_TP_TOTAL  = float(os.environ.get("MCL_TP_TOTAL",  "350"))
+MCL_SL_TOTAL  = float(os.environ.get("MCL_SL_TOTAL",  "888"))
 
 # Dollars per point
+# MCL (Micro Crude Light) = $100/point (100 barrels × $1/barrel per point)
 GOLD_DOLLAR_PER_POINT = float(os.environ.get("GOLD_DOLLAR_PER_POINT", "10"))
 MES_DOLLAR_PER_POINT  = float(os.environ.get("MES_DOLLAR_PER_POINT",  "5"))
+MCL_DOLLAR_PER_POINT  = float(os.environ.get("MCL_DOLLAR_PER_POINT",  "100"))
 
 # ─── Trade Duration Expiry ────────────────────────────────────────────────────
 # After this many minutes the bot assumes the trade has closed naturally
@@ -159,9 +166,17 @@ VALID_SIGNALS = {
     "MES_NPR_BULL_ELEPHANT",      "MES_NPR_BEAR_ELEPHANT",
     "MES_NPR_BULL_TAIL",          "MES_NPR_BEAR_TAIL",
     "MES_NPR_BULL_180",           "MES_NPR_BEAR_180",
+    # MCL signals (MCL_ prefix) — Micro Crude Light (WTI)
+    "MCL_BULLISH_180",            "MCL_BEARISH_180",
+    "MCL_BULLISH_LIQUIDITY_RUN",  "MCL_BEARISH_LIQUIDITY_RUN",
+    "MCL_TREND_REVERSE_BULL",     "MCL_TREND_REVERSE_BEAR",
+    "MCL_NPR_BULL_ELEPHANT",      "MCL_NPR_BEAR_ELEPHANT",
+    "MCL_NPR_BULL_TAIL",          "MCL_NPR_BEAR_TAIL",
+    "MCL_NPR_BULL_180",           "MCL_NPR_BEAR_180",
     # ICC MTF Strategy signals
     "GOLD_ICC_LONG",              "GOLD_ICC_SHORT",
     "MES_ICC_LONG",               "MES_ICC_SHORT",
+    "MCL_ICC_LONG",               "MCL_ICC_SHORT",
 } | LEGACY_GOLD_SIGNALS
 
 
@@ -185,6 +200,8 @@ def send_telegram_message(message):
 def determine_instrument(signal):
     if signal.startswith("MES_"):
         return "MES"
+    if signal.startswith("MCL_"):
+        return "MCL"
     if signal.startswith("GOLD_") or signal in LEGACY_GOLD_SIGNALS:
         return "GOLD"
     return None
@@ -227,6 +244,22 @@ def build_instrument_params(instrument):
             "sl_per_ctr":  sl_dollars_per_contract,
             "webhook_url": TRADERSPOST_GOLD_WEBHOOK_URL,
             "label":       f"Gold (MGC) - {MGC_CONTRACT}",
+        }
+    elif instrument == "MCL":
+        quantity                = MCL_QUANTITY
+        tp_dollars_per_contract = round(MCL_TP_TOTAL / MCL_QUANTITY, 2)
+        sl_dollars_per_contract = round(MCL_SL_TOTAL / MCL_QUANTITY, 2)
+        tp_points               = round(tp_dollars_per_contract / MCL_DOLLAR_PER_POINT, 2)
+        sl_points               = round(sl_dollars_per_contract / MCL_DOLLAR_PER_POINT, 2)
+        return {
+            "ticker":      MCL_CONTRACT,
+            "quantity":    quantity,
+            "tp_points":   tp_points,
+            "sl_points":   sl_points,
+            "tp_per_ctr":  tp_dollars_per_contract,
+            "sl_per_ctr":  sl_dollars_per_contract,
+            "webhook_url": TRADERSPOST_MCL_WEBHOOK_URL,
+            "label":       f"Crude Oil (MCL) - {MCL_CONTRACT}",
         }
     else:  # MES
         quantity                = MES_QUANTITY
@@ -284,15 +317,15 @@ def close_position():
     Use this to resync after a bot restart that happened mid-trade,
     or after manually closing a trade at the broker.
 
-    Body: { "passphrase": "...", "instrument": "GOLD" or "MES" }
+    Body: { "passphrase": "...", "instrument": "GOLD", "MES", or "MCL" }
     """
     data = request.get_json()
     if not data or data.get("passphrase") != WEBHOOK_PASSPHRASE:
         return jsonify({"error": "Unauthorized"}), 401
 
     instrument = data.get("instrument", "").upper()
-    if instrument not in ("GOLD", "MES"):
-        return jsonify({"error": "instrument must be GOLD or MES"}), 400
+    if instrument not in ("GOLD", "MES", "MCL"):
+        return jsonify({"error": "instrument must be GOLD, MES, or MCL"}), 400
 
     if not has_open_position(instrument):
         return jsonify({
