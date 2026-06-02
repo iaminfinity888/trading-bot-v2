@@ -21,7 +21,7 @@ TRADERSPOST_MES_WEBHOOK_URL  = os.environ.get("TRADERSPOST_MES_WEBHOOK_URL")
 TRADERSPOST_MCL_WEBHOOK_URL  = os.environ.get("TRADERSPOST_MCL_WEBHOOK_URL")
 
 # ─── Environment Variables (Configurable with defaults) ───────────────────────
-MGC_CONTRACT       = os.environ.get("MGC_CONTRACT",  "MGCM2026")
+MGC_CONTRACT       = os.environ.get("MGC_CONTRACT",  "MGCQ2026")
 MES_CONTRACT       = os.environ.get("MES_CONTRACT",  "MESM2026")
 MCL_CONTRACT       = os.environ.get("MCL_CONTRACT",  "MCLN2026")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
